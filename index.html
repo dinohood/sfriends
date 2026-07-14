@@ -2,146 +2,137 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Native 1080p 60FPS Streamer</title>
+    <title>Native 1080p 60FPS Pure Streamer</title>
     <style>
         body { font-family: sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 20px; margin: 0; }
-        .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        video { width: 100%; max-height: 500px; background: #000; border-radius: 8px; margin: 20px 0; }
-        button { background: #3b82f6; color: white; border: none; padding: 12px 24px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; margin: 5px; }
+        .container { max-width: 800px; margin: 0 auto; background: #1e293b; padding: 20px; border-radius: 12px; }
+        video { width: 100%; max-height: 450px; background: #000; border-radius: 8px; margin: 15px 0; }
+        button { background: #3b82f6; color: white; border: none; padding: 12px 24px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; margin: 5px; }
         button:hover { background: #2563eb; }
-        input { padding: 12px; width: 250px; border-radius: 6px; border: 1px solid #475569; background: #334155; color: white; font-size: 15px; }
-        #errorLog { color: #f87171; background: #451a03; border: 1px solid #78350f; padding: 10px; border-radius: 6px; display: none; margin-top: 15px; font-family: monospace; }
-        .status { font-weight: bold; color: #10b981; }
+        textarea { width: 90%; height: 100px; background: #334155; color: white; border: 1px solid #475569; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px; resize: none; }
+        .step { background: #1e293b; border: 1px solid #475569; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left; }
+        h3 { margin-top: 0; color: #60a5fa; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Native Browser Streamer (60 FPS)</h1>
-        <p>Ensure your URL bar reads <span class="status">http://localhost:5500</span></p>
+        <h1>Native 60FPS Streaming Link</h1>
+        <p>Ensure your URL bar explicitly says <strong>http://localhost:5500</strong></p>
         
-        <div>
-            <button id="startBtn">1. Capture Screen</button>
+        <video id="videoScreen" autoplay playsinline controls></video>
+
+        <!-- STREAMER INTERFACE -->
+        <div class="step">
+            <h3>Host Stream (You)</h3>
+            <button id="startCapture">1. Capture 60FPS Screen</button>
+            <button id="createOffer" disabled>2. Generate Connection Code</button>
+            <p>Copy this generated connection code and send it to your friend:</p>
+            <textarea id="localCode" readonly placeholder="Your code will appear here..."></textarea>
             <br><br>
-            <input type="text" id="roomInput" placeholder="Enter secret room name">
-            <button id="connectBtn">2. Connect Stream</button>
+            <p>Paste the response code your friend sends back here:</p>
+            <textarea id="remoteCodeInput" placeholder="Paste friend's answer code here..."></textarea>
+            <button id="acceptAnswer">3. Link & Complete Connection</button>
         </div>
 
-        <div id="errorLog"></div>
-        <video id="previewVideo" autoplay playsinline controls></video>
+        <!-- VIEWER INTERFACE -->
+        <div class="step">
+            <h3>Join Stream (Your Friend)</h3>
+            <p>Paste the code your friend sent you here:</p>
+            <textarea id="viewerOfferInput" placeholder="Paste host's code here..."></textarea>
+            <button id="createAnswer">Generate Return Code</button>
+            <p>Copy this return code and send it back to the host:</p>
+            <textarea id="viewerAnswerOutput" readonly placeholder="Send this code back to host..."></textarea>
+        </div>
     </div>
 
-    <!-- Sourced from ScaleDrone for robust, free signaling links -->
-    <script src="https://scaledrone.com"></script>
     <script>
         let localStream;
         let pc;
-        const roomHash = "observable-"; // ScaleDrone requirement for peer rooms
+        // Public Google directory server to map connection routing paths
+        const config = { iceServers: [{ urls: 'stun:://google.com' }] };
+
+        const videoScreen = document.getElementById('videoScreen');
+        const startCapture = document.getElementById('startCapture');
+        const createOffer = document.getElementById('createOffer');
+        const localCode = document.getElementById('localCode');
+        const remoteCodeInput = document.getElementById('remoteCodeInput');
+        const acceptAnswer = document.getElementById('acceptAnswer');
         
-        const startBtn = document.getElementById('startBtn');
-        const connectBtn = document.getElementById('connectBtn');
-        const previewVideo = document.getElementById('previewVideo');
-        const errorLog = document.getElementById('errorLog');
+        const viewerOfferInput = document.getElementById('viewerOfferInput');
+        const createAnswer = document.getElementById('createAnswer');
+        const viewerAnswerOutput = document.getElementById('viewerAnswerOutput');
 
-        function showError(message) {
-            errorLog.innerText = `Error: ${message}`;
-            errorLog.style.display = 'block';
-        }
-
-        // 1. Capture Video using standard WebRTC constraints
-        startBtn.onclick = async () => {
-            errorLog.style.display = 'none';
+        // 1. Capture stream securely at 60 FPS
+        startCapture.onclick = async () => {
             try {
                 localStream = await navigator.mediaDevices.getDisplayMedia({
                     video: {
                         width: { ideal: 1920, max: 2560 },
                         height: { ideal: 1080, max: 1440 },
-                        frameRate: { ideal: 60, max: 60 } // Compliant 60fps limit logic
+                        frameRate: { ideal: 60, max: 60 }
                     },
                     audio: true
                 });
-                previewVideo.srcObject = localStream;
-                previewVideo.muted = true; 
+                videoScreen.srcObject = localStream;
+                videoScreen.muted = true;
+                createOffer.disabled = false;
             } catch (err) {
-                showError(`${err.name} - ${err.message}`);
+                alert(`Capture Error: ${err.message}`);
             }
         };
 
-        // 2. Setup Connection
-        connectBtn.onclick = () => {
-            const roomName = document.getElementById('roomInput').value;
-            if (!roomName) return alert("Please enter a room name first!");
-            
-            // Check if library compiled successfully
-            if (typeof ScaleDrone === 'undefined') {
-                showError("ScaleDrone library failed to load. Check your internet or disable adblock.");
-                return;
-            }
-
-            // Using ScaleDrone's public demo channel ID
-            const drone = new ScaleDrone('yiS12TsdtSp6YmqM'); 
-            
-            drone.on('open', error => {
-                if (error) return showError(error);
-                
-                const room = drone.subscribe(roomHash + roomName);
-                
-                room.on('open', error => {
-                    if (error) return showError(error);
-                    setupWebRTC(drone, roomName, !!localStream);
-                });
-            });
-        };
-
-        function setupWebRTC(drone, roomName, isStreamer) {
-            const config = { iceServers: [{ urls: 'stun:://google.com' }] };
+        function setupPeer(isHost) {
             pc = new RTCPeerConnection(config);
-
-            pc.onicecandidate = event => {
-                if (event.candidate) {
-                    drone.publish({
-                        room: roomHash + roomName,
-                        message: { candidate: event.candidate }
-                    });
-                }
-            };
-
-            if (isStreamer && localStream) {
+            
+            if (isHost && localStream) {
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
             }
 
             pc.ontrack = event => {
-                if (!previewVideo.srcObject || previewVideo.srcObject === localStream) {
-                    previewVideo.srcObject = event.streams[0];
-                    previewVideo.muted = false;
+                if (!videoScreen.srcObject || videoScreen.srcObject === localStream) {
+                    videoScreen.srcObject = event.streams[0];
+                    videoScreen.muted = false;
+                }
+            };
+        }
+
+        // Host creates connection token
+        createOffer.onclick = async () => {
+            setupPeer(true);
+            
+            pc.onicecandidate = event => {
+                if (!event.candidate) {
+                    // ICE compilation finished: Output absolute encoded connection parameters
+                    localCode.value = btoa(JSON.stringify(pc.localDescription));
                 }
             };
 
-            // Handshake logic
-            if (isStreamer) {
-                pc.createOffer().then(offer => {
-                    pc.setLocalDescription(offer);
-                    drone.publish({ room: roomHash + roomName, message: { offer: offer } });
-                });
-            }
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+        };
 
-            drone.on('message', message => {
-                const data = message.data;
-                if (message.clientId === drone.clientId) return; // Ignore self
-
-                if (data.offer && !isStreamer) {
-                    pc.setRemoteDescription(new RTCSessionDescription(data.offer))
-                      .then(() => pc.createAnswer())
-                      .then(answer => {
-                          pc.setLocalDescription(answer);
-                          drone.publish({ room: roomHash + roomName, message: { answer: answer } });
-                      });
-                } else if (data.answer && isStreamer) {
-                    pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                } else if (data.candidate) {
-                    pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {});
+        // Friend inputs host token, generates return key
+        createAnswer.onclick = async () => {
+            setupPeer(false);
+            
+            pc.onicecandidate = event => {
+                if (!event.candidate) {
+                    viewerAnswerOutput.value = btoa(JSON.stringify(pc.localDescription));
                 }
-            });
-        }
+            };
+
+            const decodedOffer = JSON.parse(atob(viewerOfferInput.value));
+            await pc.setRemoteDescription(new RTCSessionDescription(decodedOffer));
+            
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+        };
+
+        // Host receives back return key, starting connection
+        acceptAnswer.onclick = async () => {
+            const decodedAnswer = JSON.parse(atob(remoteCodeInput.value));
+            await pc.setRemoteDescription(new RTCSessionDescription(decodedAnswer));
+        };
     </script>
 </body>
 </html>
