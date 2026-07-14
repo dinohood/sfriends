@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Native 60FPS Screen Streamer</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #fff; text-align: center; padding: 20px; }
+        video { width: 80%; max-width: 1200px; background: #000; border-radius: 8px; margin-top: 20px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        input { padding: 10px; width: 300px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>Native Resolution 60FPS Streamer</h1>
+    <div id="setup">
+        <button id="startStream">1. Start Screen Capture</button>
+        <br><br>
+        <input type="text" id="roomId" placeholder="Enter a unique Room Name (e.g., mygame123)">
+        <button id="connectBtn">2. Create/Join Room</button>
+    </div>
+    
+    <br>
+    <video id="remoteVideo" autoplay playsinline controls></video>
+
+    <!-- Bugout library handles the free, browser-to-browser connection tracking -->
+    <script src="https://jsdelivr.net"></script>
+    <script>
+        let localStream;
+        let peerConnection;
+        const videoElement = document.getElementById("remoteVideo");
+        
+        // Ice servers help find the direct network path between you and your friend
+        const config = { iceServers: [{ urls: "stun:://google.com" }] };
+
+        // 1. Capture Screen at Native Resolution and 60 FPS
+        document.getElementById("startStream").onclick = async () => {
+            try {
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        width: { ideal: window.screen.width },   // Pulls your exact monitor width
+                        height: { ideal: window.screen.height }, // Pulls your exact monitor height
+                        frameRate: { ideal: 60, min: 60 }        // Forces 60 FPS
+                    },
+                    audio: true // Includes system audio if you choose to share it
+                });
+                videoElement.srcObject = localStream;
+                videoElement.muted = true; // Mute locally to prevent feedback echo
+            } catch (err) {
+                alert("Error capturing screen: " + err.message);
+            }
+        };
+
+        // 2. Connect and Stream via WebRTC
+        document.getElementById("connectBtn").onclick = () => {
+            const roomId = document.getElementById("roomId").value;
+            if (!roomId) return alert("Please enter a room name!");
+            
+            // Instantiates Bugout to securely bridge the browser session tracking
+            const b = new Bugout(roomId);
+            
+            peerConnection = new RTCPeerConnection(config);
+
+            // If we are the streamer, attach the high-res 60fps video tracks
+            if (localStream) {
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            }
+
+            // Handle incoming stream for your friend
+            peerConnection.ontrack = event => {
+                if (!videoElement.srcObject) {
+                    videoElement.srcObject = event.streams[0];
+                    videoElement.muted = false;
+                }
+            };
+
+            // Network routing setup
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    b.send({ type: "candidate", candidate: event.candidate });
+                }
+            };
+
+            // Automatic handshaking signals between you and your friend
+            b.on("message", async (address, msg) => {
+                if (msg.type === "offer" && !localStream) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    b.send({ type: "answer", answer: answer });
+                } else if (msg.type === "answer" && localStream) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.answer));
+                } else if (msg.type === "candidate") {
+                    try { await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch(e){}
+                }
+            });
+
+            // If your friend joins, trigger the connection offer
+            b.on("seen", async () => {
+                if (localStream) {
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    b.send({ type: "offer", offer: offer });
+                }
+            });
+        };
+    </script>
+</body>
+</html>
