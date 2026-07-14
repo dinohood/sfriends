@@ -92,8 +92,10 @@
             }
         
             pc.ontrack = event => {
+                // Check if the video element is empty or still showing your own local preview
                 if (!videoScreen.srcObject || videoScreen.srcObject === localStream) {
-                    videoScreen.srcObject = event.streams;
+                    // FIXED: Added [0] to grab the actual stream object out of the array container
+                    videoScreen.srcObject = event.streams[0];
                     videoScreen.muted = false;
                 }
             };
