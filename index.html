@@ -50,13 +50,7 @@
         let pc;
         // Public Google directory server to map connection routing paths
         // Explicit URL array format stops the browser's hostname parsing engine from crashing
-        const config = { 
-            iceServers: [
-                { 
-                    urls: ["stun:://google.com", "stun:://google.com"] 
-                }
-            ] 
-        };
+        const config = { iceServers: [] };
 
 
         const videoScreen = document.getElementById('videoScreen');
@@ -90,15 +84,16 @@
         };
 
         function setupPeer(isHost) {
+            // Instantiates WebRTC using purely your local machine's native connection data
             pc = new RTCPeerConnection(config);
             
             if (isHost && localStream) {
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
             }
-
+        
             pc.ontrack = event => {
                 if (!videoScreen.srcObject || videoScreen.srcObject === localStream) {
-                    videoScreen.srcObject = event.streams[0];
+                    videoScreen.srcObject = event.streams;
                     videoScreen.muted = false;
                 }
             };
