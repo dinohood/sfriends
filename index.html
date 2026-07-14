@@ -49,7 +49,15 @@
         let localStream;
         let pc;
         // Public Google directory server to map connection routing paths
-        const config = { iceServers: [{ urls: 'stun:://google.com' }] };
+        // Explicit URL array format stops the browser's hostname parsing engine from crashing
+        const config = { 
+            iceServers: [
+                { 
+                    urls: ["stun:://google.com", "stun:://google.com"] 
+                }
+            ] 
+        };
+
 
         const videoScreen = document.getElementById('videoScreen');
         const startCapture = document.getElementById('startCapture');
